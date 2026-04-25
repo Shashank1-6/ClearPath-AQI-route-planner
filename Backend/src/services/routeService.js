@@ -23,22 +23,10 @@ async function getOptimalRoute(sourceInput, destinationInput, type) {
           const points = polylineUtils.decodePolyline(route.polyline);
 
           // Sample points (reduce API calls)
-          const sampledPoints = polylineUtils.samplePoints(points);
+          const sampledPoints = polylineUtils.samplePoints(points,15);
 
           // Fetch AQI for all points in parallel
-          const aqiValues = await Promise.all(
-            sampledPoints.map((point) =>
-              aqiService.getAQI(point.lat, point.lng)
-            )
-          );
-
-          // Compute average AQI
-          const validAQI = aqiValues.filter((val) => val !== null);
-          const avgAQI =
-            validAQI.length > 0
-              ? validAQI.reduce((sum, val) => sum + val, 0) /
-                validAQI.length
-              : Infinity;
+          const avgAQI = await aqiService.getRouteAQI(sampledPoints);
 
           return {
             ...route,
@@ -57,17 +45,16 @@ async function getOptimalRoute(sourceInput, destinationInput, type) {
     );
 
     // 4. Rank routes
-    const rankedRoutes = scoringService.scoreRoutes(
-      processedRoutes,
-      type
-    );
+    const { sortedRoutes, bestRoute } = scoringService.scoreRoutes(
+  processedRoutes,
+  type
+);
 
-    // 5. Return best + alternatives
-    return {
-      selectedType: type,
-      bestRoute: rankedRoutes[0],
-      alternatives: rankedRoutes.slice(1),
-    };
+return {
+  selectedType: type,
+  bestRoute,
+  alternatives: sortedRoutes.slice(1),
+};
   } catch (error) {
     console.error("Route Service Error:", error.message);
     throw new Error("Failed to compute optimal route");

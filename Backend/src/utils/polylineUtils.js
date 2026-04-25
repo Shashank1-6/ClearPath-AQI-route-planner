@@ -39,7 +39,10 @@ function decodePolyline(encoded) {
     const deltaLng = (result & 1) ? ~(result >> 1) : (result >> 1);
     lng += deltaLng;
 
-    points.push([lat / 1e5, lng / 1e5]);
+    points.push({
+  lat: lat / 1e5,
+  lng: lng / 1e5
+});
   }
 
   return points;

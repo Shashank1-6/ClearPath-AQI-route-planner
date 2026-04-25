@@ -1,45 +1,43 @@
 const axios = require("axios");
 
-const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
+const MAPBOX_API_KEY = process.env.MAPBOX_API_KEY;
 
 async function getRoutes(sourceCoords, destCoords) {
   try {
     const { lat: srcLat, lng: srcLng } = sourceCoords;
     const { lat: destLat, lng: destLng } = destCoords;
 
-    const url = "https://maps.googleapis.com/maps/api/directions/json";
+    // Mapbox expects lng,lat (IMPORTANT)
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${srcLng},${srcLat};${destLng},${destLat}`;
 
     const response = await axios.get(url, {
       params: {
-        origin: `${srcLat},${srcLng}`,
-        destination: `${destLat},${destLng}`,
         alternatives: true,
-        key: GOOGLE_MAPS_API_KEY
+        geometries: "polyline", // keeps same format as Google
+        overview: "full",
+        access_token: MAPBOX_API_KEY
       }
     });
 
-    if (response.data.status !== "OK") {
-      throw new Error(`Maps API Error: ${response.data.status}`);
+    if (!response.data || !response.data.routes) {
+      throw new Error("Invalid response from Mapbox Directions API");
     }
 
     const routes = response.data.routes;
 
     const formattedRoutes = routes.map(route => {
-      const leg = route.legs[0]; // usually single leg
-
       return {
-        polyline: route.overview_polyline.points,
-        distance: leg.distance.value, // in meters
-        duration: leg.duration.value  // in seconds
+        polyline: route.geometry,        // already encoded polyline
+        distance: route.distance,        // meters
+        duration: route.duration         // seconds
       };
     });
 
     return formattedRoutes;
 
   } catch (error) {
-    console.error("Error in getRoutes:", error.message);
-
-    throw new Error("Failed to fetch routes from Maps API");
+    console.error("Maps Service Error:", error.response?.data || error.message);
+    throw new Error("Failed to fetch routes from Mapbox API");
   }
 }
 

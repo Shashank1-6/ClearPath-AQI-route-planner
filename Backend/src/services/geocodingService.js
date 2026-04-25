@@ -1,29 +1,25 @@
 const axios = require("axios");
 
-// Simple in-memory cache
+// In-memory cache
 const cache = new Map();
 
-// Regex to detect "lat,lng"
+// Detect "lat,lng"
 const COORD_REGEX = /^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/;
 
-const GOOGLE_GEOCODING_URL = "https://maps.googleapis.com/maps/api/geocode/json";
+const MAPBOX_GEOCODING_URL =
+  "https://api.mapbox.com/geocoding/v5/mapbox.places";
 
-/**
- * Convert input (place name or lat,lng string) → coordinates
- * @param {string} input
- * @returns {{ lat: number, lng: number }}
- */
 async function getCoordinates(input) {
   try {
     // 🔹 Validation
     if (!input || typeof input !== "string") {
-      throw new Error("Invalid input: must be a non-empty string");
+      throw new Error("Invalid input");
     }
 
     const trimmedInput = input.trim();
 
     if (!trimmedInput) {
-      throw new Error("Invalid input: empty string");
+      throw new Error("Empty input");
     }
 
     // 🔹 Case 1: Already coordinates
@@ -37,44 +33,38 @@ async function getCoordinates(input) {
       return { lat, lng };
     }
 
-    // 🔹 Case 2: Check cache
+    // 🔹 Case 2: Cache
     if (cache.has(trimmedInput)) {
       return cache.get(trimmedInput);
     }
 
-    // 🔹 Case 3: Call Google Geocoding API
-    const response = await axios.get(GOOGLE_GEOCODING_URL, {
-      params: {
-        address: trimmedInput,
-        key: process.env.GOOGLE_MAPS_API_KEY,
-      },
-    });
+    // 🔹 Case 3: Mapbox API call
+    const response = await axios.get(
+      `${MAPBOX_GEOCODING_URL}/${encodeURIComponent(trimmedInput)}.json`,
+      {
+        params: {
+          access_token: process.env.MAPBOX_API_KEY,
+          limit: 1,
+        },
+      }
+    );
 
-    if (!response.data || response.data.status !== "OK") {
-      throw new Error(
-        `Geocoding API error: ${response.data.status || "Unknown error"}`
-      );
+    const data = response.data;
+
+    if (!data.features || data.features.length === 0) {
+      throw new Error("No results found");
     }
 
-    const results = response.data.results;
+    // ⚠️ Mapbox returns [lng, lat]
+    const [lng, lat] = data.features[0].center;
 
-    if (!results || results.length === 0) {
-      throw new Error("No results found for the given location");
-    }
+    const coordinates = { lat, lng };
 
-    const location = results[0].geometry.location;
-
-    const coordinates = {
-      lat: location.lat,
-      lng: location.lng,
-    };
-
-    // 🔹 Store in cache
+    // 🔹 Cache result
     cache.set(trimmedInput, coordinates);
 
     return coordinates;
   } catch (error) {
-    // Normalize errors
     throw new Error(`Geocoding failed: ${error.message}`);
   }
 }

@@ -2,122 +2,104 @@ const axios = require("axios");
 
 // ===== CONFIG =====
 const WAQI_API_KEY = process.env.WAQI_API_KEY;
-const BASE_URL = "https://api.waqi.info/map/bounds";
+const BASE_URL = "https://api.waqi.info/feed/geo:";
 
-// In-memory cache
+// Cache
 const cache = new Map();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 5 * 60 * 1000; // 5 min
 
-// ===== HELPER: Round coordinates for caching =====
+// ===== HELPER: Cache key =====
 function getCacheKey(lat, lng) {
-  const roundedLat = lat.toFixed(2);
-  const roundedLng = lng.toFixed(2);
-  return `${roundedLat},${roundedLng}`;
+  return `${lat.toFixed(2)},${lng.toFixed(2)}`;
 }
 
-// ===== HELPER: Distance (Haversine) =====
-function getDistance(lat1, lng1, lat2, lng2) {
-  const R = 6371; // km
-  const toRad = (deg) => (deg * Math.PI) / 180;
-
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) *
-      Math.cos(toRad(lat2)) *
-      Math.sin(dLng / 2) ** 2;
-
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+// ===== HELPER: Delay =====
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// ===== MAIN FUNCTION =====
-async function getAQI(lat, lng) {
-  const cacheKey = getCacheKey(lat, lng);
+// ===== HELPER: Fetch AQI for single point =====
+async function fetchAQI(lat, lng) {
+  const key = getCacheKey(lat, lng);
 
-  // 1. Check cache
-  if (cache.has(cacheKey)) {
-    const { data, timestamp } = cache.get(cacheKey);
+  // Cache check
+  if (cache.has(key)) {
+    const { data, timestamp } = cache.get(key);
     if (Date.now() - timestamp < CACHE_TTL) {
       return data;
     }
   }
 
   try {
-    // 2. Fetch nearby stations (small bounding box)
-    const delta = 0.5; // ~50km range
-    const url = `${BASE_URL}?token=${WAQI_API_KEY}&latlng=${lat - delta},${lng - delta},${lat + delta},${lng + delta}`;
-
+    const url = `${BASE_URL}${lat};${lng}/?token=${WAQI_API_KEY}`;
     const response = await axios.get(url);
 
     if (response.data.status !== "ok") {
-      throw new Error("WAQI API failed");
+      throw new Error("Invalid WAQI response");
     }
 
-    const stations = response.data.data;
+    const aqi = response.data.data.aqi;
 
-    // 3. Filter valid stations
-    const validStations = stations.filter(
-      (s) => s.aqi !== "-" && s.lat && s.lon
-    );
+    const value = typeof aqi === "number" ? aqi : null;
 
-    if (validStations.length === 0) {
-      throw new Error("No valid AQI stations");
-    }
-
-    let numerator = 0;
-    let denominator = 0;
-
-    let nearestStation = null;
-    let minDistance = Infinity;
-
-    // 4. Weighted average calculation
-    for (const station of validStations) {
-      const stationAQI = Number(station.aqi);
-      const distance = getDistance(lat, lng, station.lat, station.lon);
-
-      // Edge case: exact match
-      if (distance === 0) {
-        return stationAQI;
-      }
-
-      // Track nearest
-      if (distance < minDistance) {
-        minDistance = distance;
-        nearestStation = stationAQI;
-      }
-
-      numerator += stationAQI / distance;
-      denominator += 1 / distance;
-    }
-
-    let estimatedAQI;
-
-    if (denominator === 0) {
-      // fallback
-      estimatedAQI = nearestStation;
-    } else {
-      estimatedAQI = numerator / denominator;
-    }
-
-    estimatedAQI = Math.round(estimatedAQI);
-
-    // 5. Save to cache
-    cache.set(cacheKey, {
-      data: estimatedAQI,
+    cache.set(key, {
+      data: value,
       timestamp: Date.now(),
     });
 
-    return estimatedAQI;
-  } catch (error) {
-    console.error("AQI Service Error:", error.message);
-
-    // fallback: return null or default
+    return value;
+  } catch (err) {
+    console.error("AQI fetch error:", err.message);
     return null;
   }
 }
 
+// ===== MAIN FUNCTION (UPDATED LOGIC) =====
+async function getRouteAQI(points) {
+  if (!points || points.length === 0) return null;
+
+  // 1. Pick representative points
+  const start = points[0];
+  const mid = points[Math.floor(points.length / 2)];
+  const end = points[points.length - 1];
+
+  const selectedPoints = [start, mid, end];
+
+  const results = [];
+
+  // 2. Sequential calls with delay
+  for (let i = 0; i < selectedPoints.length; i++) {
+   const { lat, lng } = selectedPoints[i];
+
+    const aqi = await fetchAQI(lat, lng);
+    if (aqi !== null) {
+      results.push(aqi);
+    }
+
+    // delay (avoid 429)
+    if (i < selectedPoints.length - 1) {
+      await sleep(800 + Math.random() * 200);
+    }
+  }
+
+  // 3. Fallback if all failed
+  if (results.length === 0) {
+    return 100; // safe default
+  }
+
+  // 4. Weighted average (midpoint more important)
+  if (results.length === 3) {
+    const [a, b, c] = results;
+    return Math.round((a + 2 * b + c) / 4);
+  }
+
+  // fallback: simple average
+  const avg =
+    results.reduce((sum, val) => sum + val, 0) / results.length;
+
+  return Math.round(avg);
+}
+
 module.exports = {
-  getAQI,
+  getRouteAQI,
 };
