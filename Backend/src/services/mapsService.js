@@ -13,7 +13,7 @@ async function getRoutes(sourceCoords, destCoords) {
     const response = await axios.get(url, {
       params: {
         alternatives: true,
-        geometries: "polyline", // keeps same format as Google
+        geometries: "polyline6", // keeps same format as Google
         overview: "full",
         access_token: MAPBOX_API_KEY
       }

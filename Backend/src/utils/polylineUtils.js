@@ -1,9 +1,8 @@
-// utils/polyline.js
+// utils/polylineUtils.js
 
 /**
- * Decodes a Google encoded polyline into an array of [lat, lng]
- * @param {string} encoded
- * @returns {Array<[number, number]>}
+ * Decodes a Mapbox encoded polyline (precision = 6)
+ * Returns array of [lat, lng]
  */
 function decodePolyline(encoded) {
   const points = [];
@@ -39,10 +38,9 @@ function decodePolyline(encoded) {
     const deltaLng = (result & 1) ? ~(result >> 1) : (result >> 1);
     lng += deltaLng;
 
-    points.push({
-  lat: lat / 1e5,
-  lng: lng / 1e5
-});
+    // 🔥 FIX 1: precision = 6
+    // 🔥 FIX 2: return [lat, lng]
+    points.push([lat / 1e6, lng / 1e6]);
   }
 
   return points;
@@ -50,9 +48,7 @@ function decodePolyline(encoded) {
 
 /**
  * Samples points to reduce dataset size
- * @param {Array<[number, number]>} points
- * @param {number} step (default = 5)
- * @returns {Array<[number, number]>}
+ * Works with [lat, lng]
  */
 function samplePoints(points, step = 5) {
   if (!Array.isArray(points) || points.length === 0) return [];
@@ -63,7 +59,7 @@ function samplePoints(points, step = 5) {
     sampled.push(points[i]);
   }
 
-  // Ensure last point (destination) is always included
+  // Ensure last point is included
   const lastPoint = points[points.length - 1];
   if (sampled[sampled.length - 1] !== lastPoint) {
     sampled.push(lastPoint);

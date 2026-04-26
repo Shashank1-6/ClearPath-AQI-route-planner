@@ -4,6 +4,14 @@ const polylineUtils = require("../utils/polylineUtils");
 const aqiService = require("./aqiService");
 const scoringService = require("./scoringService");
 
+function getAQILabel(aqi) {
+  if (aqi <= 50) return "Good";
+  if (aqi <= 100) return "Satisfactory";
+  if (aqi <= 200) return "Moderate";
+  if (aqi <= 300) return "Poor";
+  return "Very Poor";
+}
+
 async function getOptimalRoute(sourceInput, destinationInput, type) {
   try {
     // 1. Convert input → coordinates
@@ -20,13 +28,16 @@ async function getOptimalRoute(sourceInput, destinationInput, type) {
       routes.map(async (route) => {
         try {
           // Decode polyline → points
-          const points = polylineUtils.decodePolyline(route.polyline);
+          // Decode polyline
+const points = polylineUtils.decodePolyline(route.polyline);
 
-          // Sample points (reduce API calls)
-          const sampledPoints = polylineUtils.samplePoints(points,15);
+// Sample points for AQI + frontend
+const sampledPoints = polylineUtils
+  .samplePoints(points, 15)
+  .map(([lat, lng]) => ({ lat, lng }));
 
-          // Fetch AQI for all points in parallel
-          const avgAQI = await aqiService.getRouteAQI(sampledPoints);
+// Get AQI
+const avgAQI = await aqiService.getRouteAQI(sampledPoints);
 
           return {
             ...route,
@@ -52,8 +63,18 @@ async function getOptimalRoute(sourceInput, destinationInput, type) {
 
 return {
   selectedType: type,
-  bestRoute,
-  alternatives: sortedRoutes.slice(1),
+  bestRoute: {
+    ...bestRoute,
+    distanceText: (bestRoute.distance / 1000).toFixed(2) + " km",
+    durationText: Math.round(bestRoute.duration / 60) + " mins",
+    avgAQI: bestRoute.avgAQI || 100,
+  },
+  alternatives: sortedRoutes.slice(1).map((route) => ({
+    ...route,
+    distanceText: (route.distance / 1000).toFixed(2) + " km",
+    durationText: Math.round(route.duration / 60) + " mins",
+    avgAQI: route.avgAQI || 100,
+  })),
 };
   } catch (error) {
     console.error("Route Service Error:", error.message);
