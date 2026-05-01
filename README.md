@@ -51,10 +51,9 @@ Component-based architecture with clean separation of concerns:
 
 <!-- Add your screenshot here -->
 ![App Screenshot](./assets/Screenshot1.png)
+
 ![App Screenshot](./assets/Screenshot2.png)
 
-<!-- Add GIF or video -->
-![Demo](./assets/demo.gif)
 
 ---
 
@@ -76,8 +75,8 @@ Follow these steps to run the project locally.
 
 ### 1. Clone the Repository
 
-git clone https://github.com/your-username/clearpath.git
-cd clearpath
+git clone https://github.com/Shashank1-6/ClearPath-AQI-route-planner
+cd ClearPath-AQI-route-planner
 
 ---
 
